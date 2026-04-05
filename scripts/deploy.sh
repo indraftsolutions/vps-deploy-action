@@ -119,6 +119,7 @@ deploy() {
   if [[ -z "${deploy_incoming_dir}" ]]; then
     local resolve_cmd=(
       sudo
+      -n
       "${DEPLOY_SCRIPT_PATH}"
       --service "${REMOTE_SERVICE_NAME}"
       --config "${DEPLOY_CONFIG_PATH}"
@@ -146,6 +147,7 @@ deploy() {
 
   local remote_cmd=(
     sudo
+    -n
     "${DEPLOY_SCRIPT_PATH}"
     --service "${REMOTE_SERVICE_NAME}"
     --config "${DEPLOY_CONFIG_PATH}"
