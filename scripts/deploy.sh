@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./lib.sh
+# shellcheck source=./lib.sh disable=SC1091
 source "${SCRIPT_DIR}/lib.sh"
 
 prepare() {
@@ -137,6 +137,8 @@ deploy() {
 
   require_nonempty_file "${ARTIFACT_FILE}"
 
+  local remote_artifact_path="${REMOTE_ARTIFACT_PATH}"
+
   umask 077
   mkdir -p "${HOME}/.ssh"
   printf '%s\n' "${SSH_PRIVATE_KEY}" >"${HOME}/.ssh/deploy_key"
@@ -173,8 +175,9 @@ deploy() {
     -o StrictHostKeyChecking=yes
   )
 
+  # shellcheck disable=SC2029
   ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_INCOMING_DIR}'"
-  scp "${scp_opts[@]}" "${ARTIFACT_FILE}" "${SSH_USER}@${SSH_HOST}:${REMOTE_ARTIFACT_PATH}"
+  scp "${scp_opts[@]}" "${ARTIFACT_FILE}" "${SSH_USER}@${SSH_HOST}:${remote_artifact_path}"
 
   local remote_cmd=(
     sudo
@@ -204,6 +207,7 @@ deploy() {
 
   local remote_cmd_string
   printf -v remote_cmd_string '%q ' "${remote_cmd[@]}"
+  # shellcheck disable=SC2029
   ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${remote_cmd_string% }"
 }
 
