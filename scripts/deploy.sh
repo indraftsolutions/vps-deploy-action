@@ -131,8 +131,11 @@ deploy() {
   fi
   [[ -n "${deploy_incoming_dir}" ]] || die "Resolved deploy incoming directory is empty for service ${REMOTE_SERVICE_NAME}"
 
+  # shellcheck disable=SC2153
   local artifact_prefix="${ARTIFACT_PREFIX}"
+  # shellcheck disable=SC2153
   local artifact_extension="${ARTIFACT_EXTENSION}"
+  # shellcheck disable=SC2153
   local release_id="${RELEASE_ID}"
   local remote_artifact_path="${deploy_incoming_dir}/${artifact_prefix}-${release_id}${artifact_extension}"
   write_output "remote_artifact_path" "${remote_artifact_path}"
