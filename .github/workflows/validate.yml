@@ -1,0 +1,46 @@
+name: validate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate YAML
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ruby -e "require 'yaml'; %w[action.yml .github/workflows/validate.yml].each { |f| YAML.load_file(f) }; puts 'yaml-ok'"
+
+      - name: Validate Bash syntax
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n scripts/lib.sh scripts/deploy.sh
+
+      - name: Run ShellCheck when available
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck scripts/lib.sh scripts/deploy.sh
+          else
+            echo "shellcheck not available on runner; skipping"
+          fi
+
+      - name: Check diff cleanliness
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check
