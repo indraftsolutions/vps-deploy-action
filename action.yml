@@ -2,17 +2,6 @@ name: 'Deploy Service Artifact'
 description: 'Download a prepared GitHub artifact, upload it to a VPS, and invoke a remote deployment script.'
 
 inputs:
-  inventory_repository:
-    description: 'Repository containing the server inventory files.'
-    required: false
-    default: 'indraftsolutions/indraft-infra'
-  inventory_ref:
-    description: 'Git ref to use when reading inventory.'
-    required: false
-    default: 'main'
-  server_name:
-    description: 'Server identifier that maps to ops/inventory/<server_name>.env in the inventory repository.'
-    required: true
   artifact_name:
     description: 'Uploaded GitHub Actions artifact name to download.'
     required: true
@@ -41,7 +30,7 @@ inputs:
   ssh_port:
     description: 'Target SSH port.'
     required: false
-    default: ''
+    default: '22'
   ssh_connect_timeout_seconds:
     description: 'Maximum seconds to wait for SSH connection establishment.'
     required: false
@@ -63,11 +52,11 @@ inputs:
   deploy_config_path:
     description: 'Remote deployment config path.'
     required: false
-    default: ''
+    default: '/etc/indraft/indraft.env'
   deploy_script_path:
     description: 'Remote root-owned deploy script path.'
     required: false
-    default: ''
+    default: '/opt/indraft/deploy/scripts/deploy.sh'
   health_path_override:
     description: 'Optional health path override passed to the remote deploy script.'
     required: false
@@ -117,18 +106,11 @@ outputs:
     value: ${{ steps.prepare.outputs.artifact_file }}
   remote_artifact_path:
     description: 'Remote uploaded artifact path.'
-    value: ${{ steps.prepare.outputs.remote_artifact_path }}
+    value: ${{ steps.remote_deploy.outputs.remote_artifact_path }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Checkout inventory repository
-      uses: actions/checkout@v4
-      with:
-        repository: ${{ inputs.inventory_repository }}
-        ref: ${{ inputs.inventory_ref }}
-        path: inventory-source
-
     - name: Download prepared deploy artifact
       uses: actions/download-artifact@v4
       with:
@@ -148,12 +130,10 @@ runs:
         INPUT_DEPLOY_SCRIPT_PATH: ${{ inputs.deploy_script_path }}
         INPUT_FORCE_SWITCH: ${{ inputs.force_switch }}
         INPUT_HEALTH_PATH_OVERRIDE: ${{ inputs.health_path_override }}
-        INPUT_SERVER_NAME: ${{ inputs.server_name }}
         INPUT_MIGRATION_MODE_OVERRIDE: ${{ inputs.migration_mode_override }}
         INPUT_REMOTE_SERVICE_NAME: ${{ inputs.remote_service_name }}
         INPUT_ROLLBACK_ON_POST_SWITCH_FAILURE: ${{ inputs.rollback_on_post_switch_failure }}
         INPUT_SSH_PORT: ${{ inputs.ssh_port }}
-        INVENTORY_REPO_ROOT: ${{ github.workspace }}/inventory-source
       run: |
         set -Eeuo pipefail
         bash "${{ github.action_path }}/scripts/deploy.sh" prepare
@@ -172,6 +152,8 @@ runs:
       env:
         ARTIFACT_FILE: ${{ steps.prepare.outputs.artifact_file }}
         BUILD_TIMESTAMP: ${{ steps.prepare.outputs.build_timestamp }}
+        ARTIFACT_EXTENSION: ${{ inputs.artifact_extension }}
+        ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
         DEPLOY_CONFIG_PATH: ${{ steps.prepare.outputs.deploy_config_path }}
         DEPLOY_INCOMING_DIR: ${{ steps.prepare.outputs.deploy_incoming_dir }}
         DEPLOY_SCRIPT_PATH: ${{ steps.prepare.outputs.deploy_script_path }}
@@ -180,7 +162,6 @@ runs:
         MIGRATION_MODE_OVERRIDE: ${{ steps.prepare.outputs.migration_mode_override }}
         RELEASE_ID: ${{ steps.prepare.outputs.release_id }}
         REMOTE_ARTIFACT_ARG: ${{ inputs.remote_artifact_arg }}
-        REMOTE_ARTIFACT_PATH: ${{ steps.prepare.outputs.remote_artifact_path }}
         REMOTE_SERVICE_NAME: ${{ inputs.remote_service_name }}
         ROLLBACK_ON_POST_SWITCH_FAILURE: ${{ steps.prepare.outputs.rollback_on_post_switch_failure }}
         SSH_CONNECT_TIMEOUT_SECONDS: ${{ inputs.ssh_connect_timeout_seconds }}
@@ -211,7 +192,7 @@ runs:
         HOST_KEY_SOURCE: ${{ env.host_key_source }}
         MIGRATION_MODE_OVERRIDE: ${{ steps.prepare.outputs.migration_mode_override }}
         REMOTE_ARTIFACT_ARG: ${{ inputs.remote_artifact_arg }}
-        REMOTE_ARTIFACT_PATH: ${{ steps.prepare.outputs.remote_artifact_path }}
+        REMOTE_ARTIFACT_PATH: ${{ steps.remote_deploy.outputs.remote_artifact_path }}
         REMOTE_DEPLOY_OUTCOME: ${{ steps.remote_deploy.outcome }}
         REMOTE_SERVICE_NAME: ${{ inputs.remote_service_name }}
         RELEASE_ID: ${{ steps.prepare.outputs.release_id }}

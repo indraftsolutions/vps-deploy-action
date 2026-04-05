@@ -1,15 +1,14 @@
 # indraft-deploy-action
 
-Public root-level GitHub Action for downloading a prepared deployment artifact, resolving deploy settings from the shared inventory repo, uploading the artifact to a VPS, and invoking the remote deployment script.
+Public root-level GitHub Action for downloading a prepared deployment artifact, uploading it to a VPS, and invoking a remote deployment script.
 
 This action is intended to be consumed by multiple application repositories, including repositories outside the `indraftsolutions` GitHub org. It is transport-only:
 
 - it downloads a previously uploaded GitHub Actions artifact
-- it checks out the shared inventory repository
-- it loads the target inventory file and its canonical server env
-- it resolves deploy paths and service-specific defaults from inventory
 - validates it
 - prepares SSH configuration
+- uses the fixed bootstrap-installed deploy config and deploy script paths by default
+- resolves the service-specific incoming upload directory on the server
 - uploads the artifact to the remote server
 - invokes the remote deploy dispatcher
 - writes a deployment summary
@@ -20,7 +19,7 @@ It does not own:
 - app build/package steps
 - server bootstrap or maintenance
 
-GitHub Environment selection must stay in the caller workflow because custom actions cannot set the job `environment`. Inventory ownership stays in `indraft-infra`.
+GitHub Environment selection must stay in the caller workflow because custom actions cannot set the job `environment`.
 
 ## Usage
 
@@ -32,16 +31,17 @@ jobs:
       name: spring-production
     steps:
       - name: Deploy artifact
-        uses: indraftsolutions/indraft-deploy-action@v1
+        uses: indraftsolutions/vps-deploy-action@v1
         with:
-          server_name: spring-prod
           artifact_name: spring-staging-war
           artifact_file_name: myapp.war
           artifact_extension: .war
           artifact_prefix: staging-war
           remote_artifact_arg: --war
           remote_service_name: spring
+          deploy_environment: spring-production
           ssh_host: ${{ secrets.SERVER_SSH_HOST }}
+          ssh_port: '22'
           ssh_user: ${{ secrets.SERVER_SSH_USER }}
           ssh_private_key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
           ssh_known_hosts: ${{ secrets.SERVER_SSH_KNOWN_HOSTS }}
@@ -51,7 +51,6 @@ jobs:
 
 ## Required Inputs
 
-- `server_name`
 - `artifact_name`
 - `artifact_file_name`
 - `artifact_extension`
@@ -64,19 +63,17 @@ jobs:
 
 ## Optional Inputs
 
-- `inventory_repository`
-- `inventory_ref`
 - `deploy_environment`
 - `ssh_port`
 - `ssh_known_hosts`
 - `ssh_connect_timeout_seconds`
 - `deploy_incoming_dir`
-- `deploy_config_path`
-- `deploy_script_path`
 - `health_path_override`
 - `force_switch`
 - `rollback_on_post_switch_failure`
 - `migration_mode_override`
+- `deploy_config_path`
+- `deploy_script_path`
 - commit signature metadata inputs
 
 ## Contract
@@ -86,17 +83,13 @@ The caller workflow is expected to:
 1. select the GitHub Environment before invoking this action
 2. upload the deployable artifact with `actions/upload-artifact`
 3. pass the environment-specific SSH secrets to this action
-
-The action is expected to:
-
-1. check out `indraft-infra` or another configured inventory repo
-2. map `server_name` to `ops/inventory/<server_name>.env`
-3. load the canonical shared server env referenced by that inventory
-4. resolve service-specific deploy paths and defaults
+4. pass the remote SSH port when it differs from `22`
 
 The target server is expected to:
 
-- expose the remote deploy script path resolved from inventory or supplied explicitly
+- expose the canonical deploy config at `/etc/indraft/indraft.env`, unless the caller overrides `deploy_config_path`
+- expose the canonical deploy script at `/opt/indraft/deploy/scripts/deploy.sh`, unless the caller overrides `deploy_script_path`
+- support `sudo <deploy_script> --service <service> --config <path> --print-incoming-dir`
 - accept the `remote_artifact_arg` flag, such as `--war` or `--artifact`
 - handle the `--service`, `--config`, release metadata, and optional override flags
 

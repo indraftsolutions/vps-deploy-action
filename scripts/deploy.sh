@@ -9,104 +9,47 @@ prepare() {
   require_var INPUT_ARTIFACT_FILE_NAME
   require_var INPUT_ARTIFACT_EXTENSION
   require_var INPUT_ARTIFACT_PREFIX
-  require_var INPUT_SERVER_NAME
+  require_var INPUT_DEPLOY_CONFIG_PATH
+  require_var INPUT_DEPLOY_INCOMING_DIR
+  require_var INPUT_DEPLOY_SCRIPT_PATH
   require_var INPUT_REMOTE_SERVICE_NAME
-  require_var INVENTORY_REPO_ROOT
 
   local artifact_path="downloaded-artifact/${INPUT_ARTIFACT_FILE_NAME}"
   require_nonempty_file "${artifact_path}"
 
   [[ "${INPUT_ARTIFACT_EXTENSION}" == .* ]] || die "artifact_extension must start with a dot: ${INPUT_ARTIFACT_EXTENSION}"
 
-  [[ "${INPUT_SERVER_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || die "server_name contains invalid characters: ${INPUT_SERVER_NAME}"
-
-  local inventory_path="${INVENTORY_REPO_ROOT}/ops/inventory/${INPUT_SERVER_NAME}.env"
-  require_nonempty_file "${inventory_path}"
-
-  set -a
-  # shellcheck disable=SC1090
-  source "${inventory_path}"
-  set +a
-
-  require_var SERVER_NAME
-  require_var GITHUB_ENVIRONMENT
-  require_var SERVER_ENV_FILE
-
-  local server_env_path="${INVENTORY_REPO_ROOT}/${SERVER_ENV_FILE}"
-  require_nonempty_file "${server_env_path}"
-
-  set -a
-  # shellcheck disable=SC1090
-  source "${server_env_path}"
-  set +a
-
-  require_var ENABLE_SPRING_SERVICE
-  require_var ENABLE_DJANGO_SERVICE
-  require_var DEPLOY_CONFIG_PATH
-  require_var DEPLOY_TOOLKIT_DIR
-
-  local service_name="${INPUT_REMOTE_SERVICE_NAME}"
-  local resolved_deploy_incoming_dir=""
-  local inventory_health_path_override=""
-  local inventory_force_switch="false"
-  local inventory_rollback_on_post_switch_failure="true"
-  local inventory_migration_mode_override=""
-
-  case "${service_name}" in
-    spring)
-      [[ "$(normalize_bool "${ENABLE_SPRING_SERVICE}")" == "true" ]] || die "Inventory ${SERVER_NAME} does not enable Spring"
-      resolved_deploy_incoming_dir="${DEPLOY_INCOMING_DIR:-}"
-      inventory_health_path_override="${SPRING_HEALTH_PATH_OVERRIDE:-}"
-      inventory_force_switch="$(normalize_bool "${SPRING_FORCE_SWITCH_DEFAULT:-false}")"
-      inventory_rollback_on_post_switch_failure="$(normalize_bool "${SPRING_ROLLBACK_ON_POST_SWITCH_FAILURE_DEFAULT:-true}")"
-      ;;
-    django)
-      [[ "$(normalize_bool "${ENABLE_DJANGO_SERVICE}")" == "true" ]] || die "Inventory ${SERVER_NAME} does not enable Django"
-      resolved_deploy_incoming_dir="${DJANGO_DEPLOY_INCOMING_DIR:-}"
-      inventory_health_path_override="${DJANGO_HEALTH_PATH_OVERRIDE:-}"
-      inventory_force_switch="$(normalize_bool "${DJANGO_FORCE_SWITCH_DEFAULT:-false}")"
-      inventory_rollback_on_post_switch_failure="$(normalize_bool "${DJANGO_ROLLBACK_ON_POST_SWITCH_FAILURE_DEFAULT:-true}")"
-      inventory_migration_mode_override="${DJANGO_MIGRATION_MODE_OVERRIDE_DEFAULT:-}"
-      ;;
-    *)
-      die "Unsupported remote service name: ${service_name}"
-      ;;
-  esac
-
-  [[ -n "${resolved_deploy_incoming_dir}" ]] || die "Resolved deploy incoming directory is empty for service ${service_name}"
-
   local resolved_ssh_port resolved_deploy_config_path resolved_deploy_script_path resolved_deploy_environment
   local resolved_health_path_override resolved_force_switch resolved_rollback_on_post_switch_failure resolved_migration_mode_override
+  local resolved_deploy_incoming_dir
 
-  resolved_ssh_port="${INPUT_SSH_PORT:-${SSH_PORT:-22}}"
-  resolved_deploy_config_path="${INPUT_DEPLOY_CONFIG_PATH:-${DEPLOY_CONFIG_PATH}}"
-  resolved_deploy_script_path="${INPUT_DEPLOY_SCRIPT_PATH:-${DEPLOY_TOOLKIT_DIR}/scripts/deploy.sh}"
-  resolved_deploy_environment="${INPUT_DEPLOY_ENVIRONMENT:-${GITHUB_ENVIRONMENT}}"
-  resolved_deploy_incoming_dir="${INPUT_DEPLOY_INCOMING_DIR:-${resolved_deploy_incoming_dir}}"
-  resolved_health_path_override="${INPUT_HEALTH_PATH_OVERRIDE:-${inventory_health_path_override}}"
-  resolved_migration_mode_override="${INPUT_MIGRATION_MODE_OVERRIDE:-${inventory_migration_mode_override}}"
+  resolved_ssh_port="${INPUT_SSH_PORT:-22}"
+  resolved_deploy_config_path="${INPUT_DEPLOY_CONFIG_PATH}"
+  resolved_deploy_script_path="${INPUT_DEPLOY_SCRIPT_PATH}"
+  resolved_deploy_environment="${INPUT_DEPLOY_ENVIRONMENT:-${INPUT_REMOTE_SERVICE_NAME}}"
+  resolved_deploy_incoming_dir="${INPUT_DEPLOY_INCOMING_DIR:-}"
+  local resolved_health_path_override="${INPUT_HEALTH_PATH_OVERRIDE:-}"
+  local resolved_migration_mode_override="${INPUT_MIGRATION_MODE_OVERRIDE:-}"
 
   if [[ -n "${INPUT_FORCE_SWITCH:-}" ]]; then
     resolved_force_switch="$(normalize_bool "${INPUT_FORCE_SWITCH}")"
   else
-    resolved_force_switch="${inventory_force_switch}"
+    resolved_force_switch="false"
   fi
 
   if [[ -n "${INPUT_ROLLBACK_ON_POST_SWITCH_FAILURE:-}" ]]; then
     resolved_rollback_on_post_switch_failure="$(normalize_bool "${INPUT_ROLLBACK_ON_POST_SWITCH_FAILURE}")"
   else
-    resolved_rollback_on_post_switch_failure="${inventory_rollback_on_post_switch_failure}"
+    resolved_rollback_on_post_switch_failure="true"
   fi
 
   local release_id build_timestamp remote_artifact_path
   release_id="$(date -u '+%Y%m%d%H%M%S')_$(git_short_sha)"
   build_timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  remote_artifact_path="${resolved_deploy_incoming_dir}/${INPUT_ARTIFACT_PREFIX}-${release_id}${INPUT_ARTIFACT_EXTENSION}"
 
   write_output "artifact_file" "${artifact_path}"
   write_output "release_id" "${release_id}"
   write_output "build_timestamp" "${build_timestamp}"
-  write_output "remote_artifact_path" "${remote_artifact_path}"
   write_output "ssh_port" "${resolved_ssh_port}"
   write_output "deploy_config_path" "${resolved_deploy_config_path}"
   write_output "deploy_script_path" "${resolved_deploy_script_path}"
@@ -122,11 +65,11 @@ deploy() {
   require_var ARTIFACT_FILE
   require_var BUILD_TIMESTAMP
   require_var DEPLOY_CONFIG_PATH
-  require_var DEPLOY_INCOMING_DIR
   require_var DEPLOY_SCRIPT_PATH
   require_var RELEASE_ID
+  require_var ARTIFACT_EXTENSION
+  require_var ARTIFACT_PREFIX
   require_var REMOTE_ARTIFACT_ARG
-  require_var REMOTE_ARTIFACT_PATH
   require_var REMOTE_SERVICE_NAME
   require_var ROLLBACK_ON_POST_SWITCH_FAILURE
   require_var SSH_CONNECT_TIMEOUT_SECONDS
@@ -136,9 +79,6 @@ deploy() {
   require_var SSH_USER
 
   require_nonempty_file "${ARTIFACT_FILE}"
-
-  # shellcheck disable=SC2153
-  local remote_artifact_path="${REMOTE_ARTIFACT_PATH}"
 
   umask 077
   mkdir -p "${HOME}/.ssh"
@@ -176,8 +116,26 @@ deploy() {
     -o StrictHostKeyChecking=yes
   )
 
+  local deploy_incoming_dir="${DEPLOY_INCOMING_DIR:-}"
+  if [[ -z "${deploy_incoming_dir}" ]]; then
+    local resolve_cmd=(
+      sudo
+      "${DEPLOY_SCRIPT_PATH}"
+      --service "${REMOTE_SERVICE_NAME}"
+      --config "${DEPLOY_CONFIG_PATH}"
+      --print-incoming-dir
+    )
+    local resolve_cmd_string
+    printf -v resolve_cmd_string '%q ' "${resolve_cmd[@]}"
+    deploy_incoming_dir="$(ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${resolve_cmd_string% }")"
+  fi
+  [[ -n "${deploy_incoming_dir}" ]] || die "Resolved deploy incoming directory is empty for service ${REMOTE_SERVICE_NAME}"
+
+  local remote_artifact_path="${deploy_incoming_dir}/${ARTIFACT_PREFIX}-${RELEASE_ID}${ARTIFACT_EXTENSION}"
+  write_output "remote_artifact_path" "${remote_artifact_path}"
+
   # shellcheck disable=SC2029
-  ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${DEPLOY_INCOMING_DIR}'"
+  ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${deploy_incoming_dir}'"
   scp "${scp_opts[@]}" "${ARTIFACT_FILE}" "${SSH_USER}@${SSH_HOST}:${remote_artifact_path}"
 
   local remote_cmd=(
