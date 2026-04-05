@@ -137,6 +137,7 @@ deploy() {
 
   require_nonempty_file "${ARTIFACT_FILE}"
 
+  # shellcheck disable=SC2153
   local remote_artifact_path="${REMOTE_ARTIFACT_PATH}"
 
   umask 077
