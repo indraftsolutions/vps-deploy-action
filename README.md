@@ -1,6 +1,6 @@
 # indraft-deploy-action
 
-Public root-level GitHub Action for downloading a prepared deployment artifact, uploading it to a VPS, and invoking a remote deployment script.
+Public root-level GitHub Action for downloading a prepared deployment artifact, uploading it to a VPS, and invoking a remote deployment script without re-uploading it as a duplicate workflow artifact.
 
 This action is intended to be consumed by multiple application repositories, including repositories outside the `indraftsolutions` GitHub org. It is transport-only:
 

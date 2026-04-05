@@ -12,7 +12,7 @@ inputs:
     description: 'Remote artifact file extension, for example .war or .tgz.'
     required: true
   artifact_prefix:
-    description: 'Prefix for the traceability artifact and remote artifact file.'
+    description: 'Prefix for the remote artifact file.'
     required: true
   remote_artifact_arg:
     description: 'Artifact flag accepted by the remote deploy script, for example --war or --artifact.'
@@ -137,15 +137,6 @@ runs:
       run: |
         set -Eeuo pipefail
         bash "${{ github.action_path }}/scripts/deploy.sh" prepare
-
-    - name: Upload artifact for traceability
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ inputs.artifact_prefix }}-${{ steps.prepare.outputs.release_id }}
-        path: ${{ steps.prepare.outputs.artifact_file }}
-        if-no-files-found: error
-        retention-days: 14
-
     - name: Run remote deployment
       id: remote_deploy
       shell: bash
