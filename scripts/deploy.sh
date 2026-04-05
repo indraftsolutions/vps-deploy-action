@@ -10,7 +10,6 @@ prepare() {
   require_var INPUT_ARTIFACT_EXTENSION
   require_var INPUT_ARTIFACT_PREFIX
   require_var INPUT_DEPLOY_CONFIG_PATH
-  require_var INPUT_DEPLOY_INCOMING_DIR
   require_var INPUT_DEPLOY_SCRIPT_PATH
   require_var INPUT_REMOTE_SERVICE_NAME
 
@@ -127,11 +126,15 @@ deploy() {
     )
     local resolve_cmd_string
     printf -v resolve_cmd_string '%q ' "${resolve_cmd[@]}"
+    # shellcheck disable=SC2029
     deploy_incoming_dir="$(ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${resolve_cmd_string% }")"
   fi
   [[ -n "${deploy_incoming_dir}" ]] || die "Resolved deploy incoming directory is empty for service ${REMOTE_SERVICE_NAME}"
 
-  local remote_artifact_path="${deploy_incoming_dir}/${ARTIFACT_PREFIX}-${RELEASE_ID}${ARTIFACT_EXTENSION}"
+  local artifact_prefix="${ARTIFACT_PREFIX}"
+  local artifact_extension="${ARTIFACT_EXTENSION}"
+  local release_id="${RELEASE_ID}"
+  local remote_artifact_path="${deploy_incoming_dir}/${artifact_prefix}-${release_id}${artifact_extension}"
   write_output "remote_artifact_path" "${remote_artifact_path}"
 
   # shellcheck disable=SC2029
