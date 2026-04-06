@@ -151,7 +151,7 @@ deploy() {
     "${DEPLOY_SCRIPT_PATH}"
     --service "${REMOTE_SERVICE_NAME}"
     --config "${DEPLOY_CONFIG_PATH}"
-    "${REMOTE_ARTIFACT_ARG}" "${REMOTE_ARTIFACT_PATH}"
+    "${REMOTE_ARTIFACT_ARG}" "${remote_artifact_path}"
     --release-id "${RELEASE_ID}"
     --git-sha "${GITHUB_SHA}"
     --git-branch "${GITHUB_REF_NAME}"
@@ -187,7 +187,6 @@ summary() {
   require_var FORCE_SWITCH
   require_var RELEASE_ID
   require_var REMOTE_ARTIFACT_ARG
-  require_var REMOTE_ARTIFACT_PATH
   require_var REMOTE_DEPLOY_OUTCOME
   require_var REMOTE_SERVICE_NAME
   require_var ROLLBACK_ON_POST_SWITCH_FAILURE
@@ -208,7 +207,7 @@ summary() {
     echo "- Commit signature reason: \`${COMMIT_SIGNATURE_REASON:-<unreported>}\`"
     echo "- Commit signature verified at: \`${COMMIT_SIGNATURE_VERIFIED_AT:-<unreported>}\`"
     echo "- Local artifact file: \`${ARTIFACT_FILE}\`"
-    echo "- Remote artifact path: \`${REMOTE_ARTIFACT_PATH}\`"
+    echo "- Remote artifact path: \`${REMOTE_ARTIFACT_PATH:-<unavailable>}\`"
     echo "- Remote deploy script: \`${DEPLOY_SCRIPT_PATH}\`"
     echo "- Remote service: \`${REMOTE_SERVICE_NAME}\`"
     echo "- Remote artifact arg: \`${REMOTE_ARTIFACT_ARG}\`"
