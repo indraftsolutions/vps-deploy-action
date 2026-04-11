@@ -27,8 +27,25 @@ prepare() {
   resolved_deploy_script_path="${INPUT_DEPLOY_SCRIPT_PATH}"
   resolved_deploy_environment="${INPUT_DEPLOY_ENVIRONMENT:-${INPUT_REMOTE_SERVICE_NAME}}"
   resolved_deploy_incoming_dir="${INPUT_DEPLOY_INCOMING_DIR:-}"
+  local resolved_app_runtime_env_template_path="${INPUT_APP_RUNTIME_ENV_TEMPLATE_PATH:-}"
+  local resolved_app_runtime_env_mode="${INPUT_APP_RUNTIME_ENV_MODE:-}"
   local resolved_health_path_override="${INPUT_HEALTH_PATH_OVERRIDE:-}"
   local resolved_migration_mode_override="${INPUT_MIGRATION_MODE_OVERRIDE:-}"
+  local resolved_sync_runtime_env="${INPUT_SYNC_RUNTIME_ENV:-true}"
+
+  resolved_sync_runtime_env="$(normalize_bool "${resolved_sync_runtime_env}")"
+  [[ -n "${resolved_sync_runtime_env}" ]] || resolved_sync_runtime_env="true"
+
+  if [[ -n "${resolved_app_runtime_env_template_path}" ]]; then
+    require_nonempty_file "${resolved_app_runtime_env_template_path}"
+    [[ -n "${resolved_app_runtime_env_mode}" ]] || die "app_runtime_env_mode is required when app_runtime_env_template_path is set"
+    validate_runtime_env_mode "${resolved_app_runtime_env_mode}"
+    [[ "${resolved_app_runtime_env_mode}" == "${INPUT_REMOTE_SERVICE_NAME}" ]] || {
+      die "app_runtime_env_mode (${resolved_app_runtime_env_mode}) must match remote_service_name (${INPUT_REMOTE_SERVICE_NAME})"
+    }
+  elif [[ -n "${resolved_app_runtime_env_mode}" ]]; then
+    die "app_runtime_env_mode cannot be set without app_runtime_env_template_path"
+  fi
 
   if [[ -n "${INPUT_FORCE_SWITCH:-}" ]]; then
     resolved_force_switch="$(normalize_bool "${INPUT_FORCE_SWITCH}")"
@@ -54,6 +71,9 @@ prepare() {
   write_output "deploy_script_path" "${resolved_deploy_script_path}"
   write_output "deploy_environment" "${resolved_deploy_environment}"
   write_output "deploy_incoming_dir" "${resolved_deploy_incoming_dir}"
+  write_output "app_runtime_env_template_path" "${resolved_app_runtime_env_template_path}"
+  write_output "app_runtime_env_mode" "${resolved_app_runtime_env_mode}"
+  write_output "sync_runtime_env" "${resolved_sync_runtime_env}"
   write_output "health_path_override" "${resolved_health_path_override}"
   write_output "force_switch" "${resolved_force_switch}"
   write_output "rollback_on_post_switch_failure" "${resolved_rollback_on_post_switch_failure}"
@@ -145,6 +165,33 @@ deploy() {
   ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${deploy_incoming_dir}'"
   scp "${scp_opts[@]}" "${ARTIFACT_FILE}" "${SSH_USER}@${SSH_HOST}:${remote_artifact_path}"
 
+  if [[ "${SYNC_RUNTIME_ENV:-true}" == "true" && -n "${APP_RUNTIME_ENV_TEMPLATE_PATH:-}" ]]; then
+    require_var APP_RUNTIME_ENV_MODE
+    validate_runtime_env_mode "${APP_RUNTIME_ENV_MODE}"
+
+    local rendered_runtime_env_file
+    rendered_runtime_env_file="$(mktemp)"
+    render_runtime_env_template "${APP_RUNTIME_ENV_TEMPLATE_PATH}" "${rendered_runtime_env_file}"
+
+    local remote_runtime_env_template_path="${deploy_incoming_dir}/runtime-env-${REMOTE_SERVICE_NAME}-${release_id}.env"
+    scp "${scp_opts[@]}" "${rendered_runtime_env_file}" "${SSH_USER}@${SSH_HOST}:${remote_runtime_env_template_path}"
+    rm -f "${rendered_runtime_env_file}"
+
+    local remote_render_cmd=(
+      sudo
+      -n
+      "${DEPLOY_SCRIPT_PATH}"
+      --config "${DEPLOY_CONFIG_PATH}"
+      --render-runtime-env
+      --mode "${APP_RUNTIME_ENV_MODE}"
+      --template "${remote_runtime_env_template_path}"
+    )
+    local remote_render_cmd_string
+    printf -v remote_render_cmd_string '%q ' "${remote_render_cmd[@]}"
+    # shellcheck disable=SC2029
+    ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${remote_render_cmd_string% }; render_status=\$?; rm -f '${remote_runtime_env_template_path}'; exit \${render_status}"
+  fi
+
   local remote_cmd=(
     sudo
     -n
@@ -210,6 +257,9 @@ summary() {
     echo "- Remote artifact path: \`${REMOTE_ARTIFACT_PATH:-<unavailable>}\`"
     echo "- Remote deploy script: \`${DEPLOY_SCRIPT_PATH}\`"
     echo "- Remote service: \`${REMOTE_SERVICE_NAME}\`"
+    echo "- Runtime env sync: \`${SYNC_RUNTIME_ENV}\`"
+    echo "- Runtime env template path: \`${APP_RUNTIME_ENV_TEMPLATE_PATH:-<disabled>}\`"
+    echo "- Runtime env mode: \`${APP_RUNTIME_ENV_MODE:-<disabled>}\`"
     echo "- Remote artifact arg: \`${REMOTE_ARTIFACT_ARG}\`"
     echo "- SSH host key source: \`${HOST_KEY_SOURCE:-unknown}\`"
     echo "- SSH connect timeout (seconds): \`${SSH_CONNECT_TIMEOUT_SECONDS}\`"

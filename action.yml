@@ -57,6 +57,18 @@ inputs:
     description: 'Remote root-owned deploy script path.'
     required: false
     default: '/opt/indraft/deploy/scripts/deploy.sh'
+  app_runtime_env_template_path:
+    description: 'Optional caller-owned runtime env template path inside the checked out repository workspace.'
+    required: false
+    default: ''
+  app_runtime_env_mode:
+    description: 'Runtime env target mode when syncing a template, either spring or django.'
+    required: false
+    default: ''
+  sync_runtime_env:
+    description: 'Whether to render and upload the app runtime env template before deployment.'
+    required: false
+    default: 'true'
   health_path_override:
     description: 'Optional health path override passed to the remote deploy script.'
     required: false
@@ -128,6 +140,9 @@ runs:
         INPUT_DEPLOY_ENVIRONMENT: ${{ inputs.deploy_environment }}
         INPUT_DEPLOY_INCOMING_DIR: ${{ inputs.deploy_incoming_dir }}
         INPUT_DEPLOY_SCRIPT_PATH: ${{ inputs.deploy_script_path }}
+        INPUT_APP_RUNTIME_ENV_TEMPLATE_PATH: ${{ inputs.app_runtime_env_template_path }}
+        INPUT_APP_RUNTIME_ENV_MODE: ${{ inputs.app_runtime_env_mode }}
+        INPUT_SYNC_RUNTIME_ENV: ${{ inputs.sync_runtime_env }}
         INPUT_FORCE_SWITCH: ${{ inputs.force_switch }}
         INPUT_HEALTH_PATH_OVERRIDE: ${{ inputs.health_path_override }}
         INPUT_MIGRATION_MODE_OVERRIDE: ${{ inputs.migration_mode_override }}
@@ -145,6 +160,8 @@ runs:
         BUILD_TIMESTAMP: ${{ steps.prepare.outputs.build_timestamp }}
         ARTIFACT_EXTENSION: ${{ inputs.artifact_extension }}
         ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
+        APP_RUNTIME_ENV_MODE: ${{ steps.prepare.outputs.app_runtime_env_mode }}
+        APP_RUNTIME_ENV_TEMPLATE_PATH: ${{ steps.prepare.outputs.app_runtime_env_template_path }}
         DEPLOY_CONFIG_PATH: ${{ steps.prepare.outputs.deploy_config_path }}
         DEPLOY_INCOMING_DIR: ${{ steps.prepare.outputs.deploy_incoming_dir }}
         DEPLOY_SCRIPT_PATH: ${{ steps.prepare.outputs.deploy_script_path }}
@@ -155,6 +172,7 @@ runs:
         REMOTE_ARTIFACT_ARG: ${{ inputs.remote_artifact_arg }}
         REMOTE_SERVICE_NAME: ${{ inputs.remote_service_name }}
         ROLLBACK_ON_POST_SWITCH_FAILURE: ${{ steps.prepare.outputs.rollback_on_post_switch_failure }}
+        SYNC_RUNTIME_ENV: ${{ steps.prepare.outputs.sync_runtime_env }}
         SSH_CONNECT_TIMEOUT_SECONDS: ${{ inputs.ssh_connect_timeout_seconds }}
         SSH_HOST: ${{ inputs.ssh_host }}
         SSH_KNOWN_HOSTS: ${{ inputs.ssh_known_hosts }}
@@ -171,6 +189,8 @@ runs:
       env:
         ARTIFACT_FILE: ${{ steps.prepare.outputs.artifact_file }}
         BUILD_TIMESTAMP: ${{ steps.prepare.outputs.build_timestamp }}
+        APP_RUNTIME_ENV_MODE: ${{ steps.prepare.outputs.app_runtime_env_mode }}
+        APP_RUNTIME_ENV_TEMPLATE_PATH: ${{ steps.prepare.outputs.app_runtime_env_template_path }}
         COMMIT_SIGNATURE_POLICY: ${{ inputs.commit_signature_policy }}
         COMMIT_SIGNATURE_REASON: ${{ inputs.commit_signature_reason }}
         COMMIT_SIGNATURE_STATUS: ${{ inputs.commit_signature_status }}
@@ -188,6 +208,7 @@ runs:
         REMOTE_SERVICE_NAME: ${{ inputs.remote_service_name }}
         RELEASE_ID: ${{ steps.prepare.outputs.release_id }}
         ROLLBACK_ON_POST_SWITCH_FAILURE: ${{ steps.prepare.outputs.rollback_on_post_switch_failure }}
+        SYNC_RUNTIME_ENV: ${{ steps.prepare.outputs.sync_runtime_env }}
         SSH_CONNECT_TIMEOUT_SECONDS: ${{ inputs.ssh_connect_timeout_seconds }}
       run: |
         set -Eeuo pipefail
