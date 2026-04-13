@@ -2,6 +2,14 @@
 
 set -Eeuo pipefail
 
+info() {
+  printf '[INFO] %s\n' "$*" >&2
+}
+
+warn() {
+  printf '[WARN] %s\n' "$*" >&2
+}
+
 die() {
   echo "$*" >&2
   exit 1

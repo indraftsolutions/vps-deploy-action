@@ -81,6 +81,7 @@ prepare() {
 }
 
 deploy() {
+  info "Starting remote deploy transport for service ${REMOTE_SERVICE_NAME:-<unset>}"
   require_var ARTIFACT_FILE
   require_var BUILD_TIMESTAMP
   require_var DEPLOY_CONFIG_PATH
@@ -98,15 +99,30 @@ deploy() {
   require_var SSH_USER
 
   require_nonempty_file "${ARTIFACT_FILE}"
+  info "Local artifact resolved at ${ARTIFACT_FILE}"
+  info "SSH target ${SSH_USER}@${SSH_HOST}:${SSH_PORT} with timeout ${SSH_CONNECT_TIMEOUT_SECONDS}s"
+  if [[ -n "${SSH_KNOWN_HOSTS:-}" ]]; then
+    info "Using provided SSH known_hosts secret"
+  else
+    warn "SSH known_hosts secret is empty; falling back to ssh-keyscan"
+  fi
+  if [[ -n "${APP_RUNTIME_ENV_TEMPLATE_PATH:-}" ]]; then
+    info "Runtime env sync enabled for mode ${APP_RUNTIME_ENV_MODE:-<unset>} using template ${APP_RUNTIME_ENV_TEMPLATE_PATH}"
+  else
+    info "Runtime env sync disabled"
+  fi
 
   umask 077
   mkdir -p "${HOME}/.ssh"
+  info "Writing deploy SSH key"
   printf '%s\n' "${SSH_PRIVATE_KEY}" >"${HOME}/.ssh/deploy_key"
 
   local host_key_source="provided-secret"
   if [[ -n "${SSH_KNOWN_HOSTS:-}" ]]; then
+    info "Writing provided known_hosts entries"
     printf '%s\n' "${SSH_KNOWN_HOSTS}" >"${HOME}/.ssh/known_hosts"
   else
+    info "Discovering SSH host key with ssh-keyscan"
     timeout "${SSH_CONNECT_TIMEOUT_SECONDS}" \
       ssh-keyscan -p "${SSH_PORT}" -H "${SSH_HOST}" >"${HOME}/.ssh/known_hosts"
     [[ -s "${HOME}/.ssh/known_hosts" ]] || die "Failed to discover SSH host key for ${SSH_HOST}:${SSH_PORT}"
@@ -115,6 +131,7 @@ deploy() {
 
   chmod 0600 "${HOME}/.ssh/deploy_key" "${HOME}/.ssh/known_hosts"
   printf 'host_key_source=%s\n' "${host_key_source}" >>"${GITHUB_ENV}"
+  info "SSH host key source: ${host_key_source}"
 
   local ssh_opts=(
     -i "${HOME}/.ssh/deploy_key"
@@ -137,6 +154,7 @@ deploy() {
 
   local deploy_incoming_dir="${DEPLOY_INCOMING_DIR:-}"
   if [[ -z "${deploy_incoming_dir}" ]]; then
+    info "Resolving remote incoming directory"
     local resolve_cmd=(
       sudo
       -n
@@ -151,6 +169,7 @@ deploy() {
     deploy_incoming_dir="$(ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${resolve_cmd_string% }")"
   fi
   [[ -n "${deploy_incoming_dir}" ]] || die "Resolved deploy incoming directory is empty for service ${REMOTE_SERVICE_NAME}"
+  info "Resolved remote incoming directory: ${deploy_incoming_dir}"
 
   # shellcheck disable=SC2153
   local artifact_prefix="${ARTIFACT_PREFIX}"
@@ -160,20 +179,25 @@ deploy() {
   local release_id="${RELEASE_ID}"
   local remote_artifact_path="${deploy_incoming_dir}/${artifact_prefix}-${release_id}${artifact_extension}"
   write_output "remote_artifact_path" "${remote_artifact_path}"
+  info "Remote artifact path: ${remote_artifact_path}"
 
   # shellcheck disable=SC2029
+  info "Ensuring remote incoming directory exists"
   ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${deploy_incoming_dir}'"
+  info "Uploading artifact to remote host"
   scp "${scp_opts[@]}" "${ARTIFACT_FILE}" "${SSH_USER}@${SSH_HOST}:${remote_artifact_path}"
 
   if [[ "${SYNC_RUNTIME_ENV:-true}" == "true" && -n "${APP_RUNTIME_ENV_TEMPLATE_PATH:-}" ]]; then
     require_var APP_RUNTIME_ENV_MODE
     validate_runtime_env_mode "${APP_RUNTIME_ENV_MODE}"
+    info "Rendering runtime env template locally"
 
     local rendered_runtime_env_file
     rendered_runtime_env_file="$(mktemp)"
     render_runtime_env_template "${APP_RUNTIME_ENV_TEMPLATE_PATH}" "${rendered_runtime_env_file}"
 
     local remote_runtime_env_template_path="${deploy_incoming_dir}/runtime-env-${REMOTE_SERVICE_NAME}-${release_id}.env"
+    info "Uploading rendered runtime env template to ${remote_runtime_env_template_path}"
     scp "${scp_opts[@]}" "${rendered_runtime_env_file}" "${SSH_USER}@${SSH_HOST}:${remote_runtime_env_template_path}"
     rm -f "${rendered_runtime_env_file}"
 
@@ -189,6 +213,7 @@ deploy() {
     local remote_render_cmd_string
     printf -v remote_render_cmd_string '%q ' "${remote_render_cmd[@]}"
     # shellcheck disable=SC2029
+    info "Rendering runtime env on remote host"
     ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${remote_render_cmd_string% }; render_status=\$?; rm -f '${remote_runtime_env_template_path}'; exit \${render_status}"
   fi
 
@@ -222,7 +247,9 @@ deploy() {
   local remote_cmd_string
   printf -v remote_cmd_string '%q ' "${remote_cmd[@]}"
   # shellcheck disable=SC2029
+  info "Invoking remote deploy command"
   ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${remote_cmd_string% }"
+  info "Remote deploy command completed"
 }
 
 summary() {
