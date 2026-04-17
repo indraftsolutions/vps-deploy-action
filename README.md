@@ -1,11 +1,11 @@
 # indraft-deploy-action
 
-Public root-level GitHub Action for downloading a prepared deployment artifact, uploading it to a VPS, and invoking a remote deployment script without re-uploading it as a duplicate workflow artifact.
+Public root-level GitHub Action for uploading a prepared deployment artifact to a VPS and invoking a remote deployment script.
 
 This action is intended to be consumed by multiple application repositories, including repositories outside the `indraftsolutions` GitHub org. It is transport-only:
 
-- it downloads a previously uploaded GitHub Actions artifact
-- validates it
+- it validates a local build artifact from the caller workspace
+- it can still download a previously uploaded GitHub Actions artifact as a legacy fallback
 - optionally renders a caller-owned runtime env template
 - prepares SSH configuration
 - uses the fixed bootstrap-installed deploy config and deploy script paths by default
@@ -35,14 +35,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Build artifact
+        run: ./gradlew clean bootWar -Pprod -Pwar -Pprometheus --no-daemon
+
+      - name: Locate artifact
+        id: artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          war_file="$(find build/libs -maxdepth 1 -type f -name '*.war' ! -name '*.war.original' | sort | head -n 1)"
+          echo "path=${war_file}" >>"${GITHUB_OUTPUT}"
+
       - name: Deploy artifact
         uses: indraftsolutions/vps-deploy-action@v1
         env:
           INDRAFT_BASE64_SECRET: ${{ secrets.INDRAFT_BASE64_SECRET }}
           INDRAFT_MAIL_PASSWORD: ${{ secrets.INDRAFT_MAIL_PASSWORD }}
         with:
-          artifact_name: spring-staging-war
-          artifact_file_name: myapp.war
+          artifact_path: ${{ steps.artifact.outputs.path }}
           artifact_extension: .war
           artifact_prefix: staging-war
           remote_artifact_arg: --war
@@ -61,8 +71,7 @@ jobs:
 
 ## Required Inputs
 
-- `artifact_name`
-- `artifact_file_name`
+- `artifact_path`
 - `artifact_extension`
 - `artifact_prefix`
 - `remote_artifact_arg`
@@ -73,6 +82,8 @@ jobs:
 
 ## Optional Inputs
 
+- `artifact_name`
+- `artifact_file_name`
 - `deploy_environment`
 - `ssh_port`
 - `ssh_known_hosts`
@@ -94,11 +105,14 @@ jobs:
 The caller workflow is expected to:
 
 1. select the GitHub Environment before invoking this action
-2. upload the deployable artifact with `actions/upload-artifact`
-3. checkout the repository in the deploy job before using `app_runtime_env_template_path`
-4. pass the environment-specific SSH secrets to this action
-5. explicitly map any `${secret:NAME}` placeholders from the runtime env template into the action `env:` block
-6. pass the remote SSH port when it differs from `22`
+2. build or package the deployable artifact in the same job
+3. pass the local artifact path via `artifact_path`
+4. checkout the repository in the deploy job before using `app_runtime_env_template_path`
+5. pass the environment-specific SSH secrets to this action
+6. explicitly map any `${secret:NAME}` placeholders from the runtime env template into the action `env:` block
+7. pass the remote SSH port when it differs from `22`
+
+Legacy artifact download is still supported by omitting `artifact_path` and passing `artifact_name` plus `artifact_file_name`, but caller-owned local artifacts are preferred to avoid GitHub Actions artifact storage quota failures.
 
 The target server is expected to:
 

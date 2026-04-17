@@ -4,10 +4,16 @@ description: 'Download a prepared GitHub artifact, upload it to a VPS, and invok
 inputs:
   artifact_name:
     description: 'Uploaded GitHub Actions artifact name to download.'
-    required: true
+    required: false
+    default: ''
   artifact_file_name:
     description: 'Expected file name inside the downloaded artifact payload.'
-    required: true
+    required: false
+    default: ''
+  artifact_path:
+    description: 'Local artifact path already present in the caller workspace. When set, download-artifact is skipped.'
+    required: false
+    default: ''
   artifact_extension:
     description: 'Remote artifact file extension, for example .war or .tgz.'
     required: true
@@ -114,7 +120,7 @@ outputs:
     description: 'UTC build timestamp used for traceability.'
     value: ${{ steps.prepare.outputs.build_timestamp }}
   artifact_file:
-    description: 'Local path to the downloaded artifact file.'
+    description: 'Local path to the deploy artifact file.'
     value: ${{ steps.prepare.outputs.artifact_file }}
   remote_artifact_path:
     description: 'Remote uploaded artifact path.'
@@ -124,6 +130,7 @@ runs:
   using: 'composite'
   steps:
     - name: Download prepared deploy artifact
+      if: ${{ inputs.artifact_path == '' }}
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.artifact_name }}
@@ -133,7 +140,9 @@ runs:
       id: prepare
       shell: bash
       env:
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact_name }}
         INPUT_ARTIFACT_FILE_NAME: ${{ inputs.artifact_file_name }}
+        INPUT_ARTIFACT_PATH: ${{ inputs.artifact_path }}
         INPUT_ARTIFACT_EXTENSION: ${{ inputs.artifact_extension }}
         INPUT_ARTIFACT_PREFIX: ${{ inputs.artifact_prefix }}
         INPUT_DEPLOY_CONFIG_PATH: ${{ inputs.deploy_config_path }}

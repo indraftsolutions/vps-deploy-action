@@ -6,14 +6,21 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 prepare() {
-  require_var INPUT_ARTIFACT_FILE_NAME
   require_var INPUT_ARTIFACT_EXTENSION
   require_var INPUT_ARTIFACT_PREFIX
   require_var INPUT_DEPLOY_CONFIG_PATH
   require_var INPUT_DEPLOY_SCRIPT_PATH
   require_var INPUT_REMOTE_SERVICE_NAME
 
-  local artifact_path="downloaded-artifact/${INPUT_ARTIFACT_FILE_NAME}"
+  local artifact_path="${INPUT_ARTIFACT_PATH:-}"
+  if [[ -n "${artifact_path}" ]]; then
+    info "Using caller-provided local artifact path: ${artifact_path}"
+  else
+    require_var INPUT_ARTIFACT_FILE_NAME
+    require_var INPUT_ARTIFACT_NAME
+    artifact_path="downloaded-artifact/${INPUT_ARTIFACT_FILE_NAME}"
+    info "Using downloaded GitHub artifact ${INPUT_ARTIFACT_NAME}: ${artifact_path}"
+  fi
   require_nonempty_file "${artifact_path}"
 
   [[ "${INPUT_ARTIFACT_EXTENSION}" == .* ]] || die "artifact_extension must start with a dot: ${INPUT_ARTIFACT_EXTENSION}"
