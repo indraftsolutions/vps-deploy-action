@@ -5,6 +5,31 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib.sh disable=SC1091
 source "${SCRIPT_DIR}/lib.sh"
 
+REMOTE_TRANSFER_DIR=""
+
+cleanup_remote_transfer_dir() {
+  [[ -n "${REMOTE_TRANSFER_DIR}" ]] || return 0
+  [[ -n "${SSH_HOST:-}" && -n "${SSH_PORT:-}" && -n "${SSH_USER:-}" ]] || return 0
+  [[ -f "${HOME}/.ssh/deploy_key" ]] || return 0
+
+  local cleanup_cmd
+  printf -v cleanup_cmd 'rm -rf -- %q' "${REMOTE_TRANSFER_DIR}"
+  if ssh \
+    -i "${HOME}/.ssh/deploy_key" \
+    -p "${SSH_PORT}" \
+    -o BatchMode=yes \
+    -o ConnectionAttempts=1 \
+    -o ConnectTimeout="${SSH_CONNECT_TIMEOUT_SECONDS:-60}" \
+    -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=yes \
+    "${SSH_USER}@${SSH_HOST}" \
+    "${cleanup_cmd}"; then
+    info "Cleaned remote transfer directory"
+  else
+    warn "Failed to clean remote transfer directory ${REMOTE_TRANSFER_DIR}"
+  fi
+}
+
 prepare() {
   require_var INPUT_ARTIFACT_EXTENSION
   require_var INPUT_ARTIFACT_PREFIX
@@ -159,38 +184,26 @@ deploy() {
     -o StrictHostKeyChecking=yes
   )
 
-  local deploy_incoming_dir="${DEPLOY_INCOMING_DIR:-}"
-  if [[ -z "${deploy_incoming_dir}" ]]; then
-    info "Resolving remote incoming directory"
-    local resolve_cmd=(
-      sudo
-      -n
-      "${DEPLOY_SCRIPT_PATH}"
-      --service "${REMOTE_SERVICE_NAME}"
-      --config "${DEPLOY_CONFIG_PATH}"
-      --print-incoming-dir
-    )
-    local resolve_cmd_string
-    printf -v resolve_cmd_string '%q ' "${resolve_cmd[@]}"
-    # shellcheck disable=SC2029
-    deploy_incoming_dir="$(ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${resolve_cmd_string% }")"
-  fi
-  [[ -n "${deploy_incoming_dir}" ]] || die "Resolved deploy incoming directory is empty for service ${REMOTE_SERVICE_NAME}"
-  info "Resolved remote incoming directory: ${deploy_incoming_dir}"
-
   # shellcheck disable=SC2153
   local artifact_prefix="${ARTIFACT_PREFIX}"
   # shellcheck disable=SC2153
   local artifact_extension="${ARTIFACT_EXTENSION}"
   # shellcheck disable=SC2153
   local release_id="${RELEASE_ID}"
-  local remote_artifact_path="${deploy_incoming_dir}/${artifact_prefix}-${release_id}${artifact_extension}"
+
+  info "Creating remote transfer directory"
+  local create_transfer_dir_cmd
+  printf -v create_transfer_dir_cmd 'set -Eeuo pipefail; umask 077; mktemp -d "${TMPDIR:-/tmp}/vps-deploy-action-%q.XXXXXXXXXX"' "${release_id}"
+  # shellcheck disable=SC2029
+  REMOTE_TRANSFER_DIR="$(ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${create_transfer_dir_cmd}")"
+  [[ "${REMOTE_TRANSFER_DIR}" == /* ]] || die "Remote transfer directory must be absolute: ${REMOTE_TRANSFER_DIR}"
+  trap cleanup_remote_transfer_dir EXIT
+  info "Remote transfer directory: ${REMOTE_TRANSFER_DIR}"
+
+  local remote_artifact_path="${REMOTE_TRANSFER_DIR}/${artifact_prefix}-${release_id}${artifact_extension}"
   write_output "remote_artifact_path" "${remote_artifact_path}"
   info "Remote artifact path: ${remote_artifact_path}"
 
-  # shellcheck disable=SC2029
-  info "Ensuring remote incoming directory exists"
-  ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "mkdir -p '${deploy_incoming_dir}'"
   info "Uploading artifact to remote host"
   scp "${scp_opts[@]}" "${ARTIFACT_FILE}" "${SSH_USER}@${SSH_HOST}:${remote_artifact_path}"
 
@@ -203,7 +216,7 @@ deploy() {
     rendered_runtime_env_file="$(mktemp)"
     render_runtime_env_template "${APP_RUNTIME_ENV_TEMPLATE_PATH}" "${rendered_runtime_env_file}"
 
-    local remote_runtime_env_template_path="${deploy_incoming_dir}/runtime-env-${REMOTE_SERVICE_NAME}-${release_id}.env"
+    local remote_runtime_env_template_path="${REMOTE_TRANSFER_DIR}/runtime-env-${REMOTE_SERVICE_NAME}-${release_id}.env"
     info "Uploading rendered runtime env template to ${remote_runtime_env_template_path}"
     scp "${scp_opts[@]}" "${rendered_runtime_env_file}" "${SSH_USER}@${SSH_HOST}:${remote_runtime_env_template_path}"
     rm -f "${rendered_runtime_env_file}"

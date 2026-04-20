@@ -9,10 +9,10 @@ This action is intended to be consumed by multiple application repositories, inc
 - optionally renders a caller-owned runtime env template
 - prepares SSH configuration
 - uses the fixed bootstrap-installed deploy config and deploy script paths by default
-- resolves the service-specific incoming upload directory on the server
-- uploads the rendered runtime env template to the server and finalizes it into the canonical runtime env file
-- uploads the artifact to the remote server
+- uploads the artifact and rendered runtime env template to a per-run remote transfer directory owned by the SSH user
+- finalizes the rendered runtime env template into the canonical runtime env file
 - invokes the remote deploy dispatcher
+- cleans up the remote transfer directory
 - writes a deployment summary
 
 It does not own:
@@ -91,7 +91,7 @@ jobs:
 - `app_runtime_env_template_path`
 - `app_runtime_env_mode`
 - `sync_runtime_env`
-- `deploy_incoming_dir`
+- `deploy_incoming_dir` (deprecated; uploads now use a per-run remote transfer directory)
 - `health_path_override`
 - `force_switch`
 - `rollback_on_post_switch_failure`
@@ -118,7 +118,6 @@ The target server is expected to:
 
 - expose the canonical deploy config at `/etc/indraft/indraft.env`, unless the caller overrides `deploy_config_path`
 - expose the canonical deploy script at `/opt/indraft/deploy/scripts/deploy.sh`, unless the caller overrides `deploy_script_path`
-- support `sudo <deploy_script> --service <service> --config <path> --print-incoming-dir`
 - support `sudo <deploy_script> --config <path> --render-runtime-env --mode <spring|django> --template <path>`
 - accept the `remote_artifact_arg` flag, such as `--war` or `--artifact`
 - handle the `--service`, `--config`, release metadata, and optional override flags

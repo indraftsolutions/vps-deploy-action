@@ -52,7 +52,7 @@ inputs:
     required: false
     default: ''
   deploy_incoming_dir:
-    description: 'Remote incoming directory writable by the deploy user.'
+    description: 'Deprecated. Uploads now use a per-run remote transfer directory owned by the SSH user.'
     required: false
     default: ''
   deploy_config_path:
