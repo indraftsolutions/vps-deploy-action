@@ -96,6 +96,7 @@ jobs:
 - `force_switch`
 - `rollback_on_post_switch_failure`
 - `migration_mode_override`
+- `spring_deploy_strategy_override` (`single-slot` is intended for the first rollout of concurrency-safe application changes)
 - `deploy_config_path`
 - `deploy_script_path`
 - commit signature metadata inputs

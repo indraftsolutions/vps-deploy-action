@@ -91,6 +91,10 @@ inputs:
     description: 'Optional migration mode override passed to the remote deploy script.'
     required: false
     default: ''
+  spring_deploy_strategy_override:
+    description: 'Optional Spring rollout override: blue-green or single-slot. Use single-slot for the first concurrency-safe release.'
+    required: false
+    default: ''
   commit_signature_policy:
     description: 'Signature verification policy used for this run.'
     required: false
@@ -155,6 +159,7 @@ runs:
         INPUT_FORCE_SWITCH: ${{ inputs.force_switch }}
         INPUT_HEALTH_PATH_OVERRIDE: ${{ inputs.health_path_override }}
         INPUT_MIGRATION_MODE_OVERRIDE: ${{ inputs.migration_mode_override }}
+        INPUT_SPRING_DEPLOY_STRATEGY_OVERRIDE: ${{ inputs.spring_deploy_strategy_override }}
         INPUT_REMOTE_SERVICE_NAME: ${{ inputs.remote_service_name }}
         INPUT_ROLLBACK_ON_POST_SWITCH_FAILURE: ${{ inputs.rollback_on_post_switch_failure }}
         INPUT_SSH_PORT: ${{ inputs.ssh_port }}
@@ -177,6 +182,7 @@ runs:
         FORCE_SWITCH: ${{ steps.prepare.outputs.force_switch }}
         HEALTH_PATH_OVERRIDE: ${{ steps.prepare.outputs.health_path_override }}
         MIGRATION_MODE_OVERRIDE: ${{ steps.prepare.outputs.migration_mode_override }}
+        SPRING_DEPLOY_STRATEGY_OVERRIDE: ${{ steps.prepare.outputs.spring_deploy_strategy_override }}
         RELEASE_ID: ${{ steps.prepare.outputs.release_id }}
         REMOTE_ARTIFACT_ARG: ${{ inputs.remote_artifact_arg }}
         REMOTE_SERVICE_NAME: ${{ inputs.remote_service_name }}
@@ -211,6 +217,7 @@ runs:
         HEALTH_PATH_OVERRIDE: ${{ steps.prepare.outputs.health_path_override }}
         HOST_KEY_SOURCE: ${{ env.host_key_source }}
         MIGRATION_MODE_OVERRIDE: ${{ steps.prepare.outputs.migration_mode_override }}
+        SPRING_DEPLOY_STRATEGY_OVERRIDE: ${{ steps.prepare.outputs.spring_deploy_strategy_override }}
         REMOTE_ARTIFACT_ARG: ${{ inputs.remote_artifact_arg }}
         REMOTE_ARTIFACT_PATH: ${{ steps.remote_deploy.outputs.remote_artifact_path }}
         REMOTE_DEPLOY_OUTCOME: ${{ steps.remote_deploy.outcome }}
