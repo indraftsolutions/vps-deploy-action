@@ -52,6 +52,7 @@ prepare() {
 
   local resolved_ssh_port resolved_deploy_config_path resolved_deploy_script_path resolved_deploy_environment
   local resolved_health_path_override resolved_force_switch resolved_rollback_on_post_switch_failure resolved_migration_mode_override
+  local resolved_spring_deploy_strategy_override
   local resolved_deploy_incoming_dir
 
   resolved_ssh_port="${INPUT_SSH_PORT:-22}"
@@ -63,10 +64,19 @@ prepare() {
   local resolved_app_runtime_env_mode="${INPUT_APP_RUNTIME_ENV_MODE:-}"
   local resolved_health_path_override="${INPUT_HEALTH_PATH_OVERRIDE:-}"
   local resolved_migration_mode_override="${INPUT_MIGRATION_MODE_OVERRIDE:-}"
+  resolved_spring_deploy_strategy_override="${INPUT_SPRING_DEPLOY_STRATEGY_OVERRIDE:-}"
   local resolved_sync_runtime_env="${INPUT_SYNC_RUNTIME_ENV:-true}"
 
   resolved_sync_runtime_env="$(normalize_bool "${resolved_sync_runtime_env}")"
   [[ -n "${resolved_sync_runtime_env}" ]] || resolved_sync_runtime_env="true"
+
+  case "${resolved_spring_deploy_strategy_override}" in
+    ""|blue-green|single-slot) ;;
+    *) die "spring_deploy_strategy_override must be blue-green or single-slot" ;;
+  esac
+  if [[ -n "${resolved_spring_deploy_strategy_override}" && "${INPUT_REMOTE_SERVICE_NAME}" != "spring" ]]; then
+    die "spring_deploy_strategy_override is only valid for the spring service"
+  fi
 
   if [[ -n "${resolved_app_runtime_env_template_path}" ]]; then
     require_nonempty_file "${resolved_app_runtime_env_template_path}"
@@ -110,6 +120,7 @@ prepare() {
   write_output "force_switch" "${resolved_force_switch}"
   write_output "rollback_on_post_switch_failure" "${resolved_rollback_on_post_switch_failure}"
   write_output "migration_mode_override" "${resolved_migration_mode_override}"
+  write_output "spring_deploy_strategy_override" "${resolved_spring_deploy_strategy_override}"
 }
 
 deploy() {
@@ -260,6 +271,10 @@ deploy() {
     remote_cmd+=(--migration-mode "${MIGRATION_MODE_OVERRIDE}")
   fi
 
+  if [[ -n "${SPRING_DEPLOY_STRATEGY_OVERRIDE:-}" ]]; then
+    remote_cmd+=(--strategy-override "${SPRING_DEPLOY_STRATEGY_OVERRIDE}")
+  fi
+
   if [[ "${FORCE_SWITCH:-false}" == "true" ]]; then
     remote_cmd+=(--force-switch)
   fi
@@ -313,6 +328,7 @@ summary() {
     echo "- Force switch: \`${FORCE_SWITCH}\`"
     echo "- Rollback on post-switch failure: \`${ROLLBACK_ON_POST_SWITCH_FAILURE}\`"
     echo "- Migration mode override: \`${MIGRATION_MODE_OVERRIDE:-<default>}\`"
+    echo "- Spring deploy strategy override: \`${SPRING_DEPLOY_STRATEGY_OVERRIDE:-<default>}\`"
     echo "- Health override: \`${HEALTH_PATH_OVERRIDE:-<default>}\`"
     echo "- Remote deploy step outcome: \`${REMOTE_DEPLOY_OUTCOME}\`"
   } >>"${GITHUB_STEP_SUMMARY}"
