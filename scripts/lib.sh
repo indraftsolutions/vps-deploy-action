@@ -93,10 +93,14 @@ render_runtime_env_template() {
         continue
       fi
 
+      # This intentionally matches a literal template placeholder.
+      # shellcheck disable=SC2016
       if [[ "${value}" == *'${secret:'* ]]; then
         die "Secret placeholders must occupy the full value for ${key}"
       fi
 
+      # This intentionally matches a literal template placeholder.
+      # shellcheck disable=SC2016
       if [[ "${value}" == *'${file:'* ]]; then
         if [[ "${value}" =~ ^\$\{file:/[^}]+\}$ ]]; then
           printf '%s\n' "${line}" >>"${output_path}"

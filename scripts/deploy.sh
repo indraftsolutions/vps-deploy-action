@@ -204,6 +204,8 @@ deploy() {
 
   info "Creating remote transfer directory"
   local create_transfer_dir_cmd
+  # TMPDIR must expand on the remote host.
+  # shellcheck disable=SC2016
   printf -v create_transfer_dir_cmd 'set -Eeuo pipefail; umask 077; mktemp -d "${TMPDIR:-/tmp}/vps-deploy-action-%q.XXXXXXXXXX"' "${release_id}"
   # shellcheck disable=SC2029
   REMOTE_TRANSFER_DIR="$(ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${create_transfer_dir_cmd}")"
@@ -243,8 +245,9 @@ deploy() {
     )
     local remote_render_cmd_string
     printf -v remote_render_cmd_string '%q ' "${remote_render_cmd[@]}"
-    # shellcheck disable=SC2029
     info "Rendering runtime env on remote host"
+    # Arguments are shell-escaped before deliberate remote expansion.
+    # shellcheck disable=SC2029
     ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${remote_render_cmd_string% }; render_status=\$?; rm -f '${remote_runtime_env_template_path}'; exit \${render_status}"
   fi
 
@@ -281,8 +284,9 @@ deploy() {
 
   local remote_cmd_string
   printf -v remote_cmd_string '%q ' "${remote_cmd[@]}"
-  # shellcheck disable=SC2029
   info "Invoking remote deploy command"
+  # The command is shell-escaped before deliberate remote expansion.
+  # shellcheck disable=SC2029
   ssh "${ssh_opts[@]}" "${SSH_USER}@${SSH_HOST}" "${remote_cmd_string% }"
   info "Remote deploy command completed"
 }
